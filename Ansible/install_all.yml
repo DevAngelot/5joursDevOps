@@ -1,0 +1,160 @@
+---
+- name: Configuration complète du serveur
+  hosts: dev_server
+  become: yes
+  
+  tasks:
+    
+    - name: Mettre à jour la liste des paquets
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Mettre à jour tous les paquets installés
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    - name: Installer les paquets de base
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - htop
+          - net-tools
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+
+    - name: Installer UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Configurer UFW - autoriser SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Configurer UFW - autoriser HTTP
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Configurer UFW - autoriser HTTPS
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Activer UFW
+      ufw:
+        state: enabled
+        policy: deny
+
+
+    - name: Supprimer les anciennes versions Docker
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+
+    - name: Ajouter la clé GPG officielle de Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Ajouter le dépôt Docker
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu jammy stable"
+        state: present
+
+    - name: Installer Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Démarrer et activer Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ajouter l'utilisateur ubuntu au groupe docker
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+
+    - name: Installer Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Démarrer et activer Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Configurer UFW pour Nginx Full
+      ufw:
+        rule: allow
+        name: 'Nginx Full'
+
+
+    - name: Installer Certbot
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+
+
+    - name: Vérifier Git
+      command: git --version
+      register: git_version
+
+    - name: Vérifier Docker
+      command: docker --version
+      register: docker_version
+
+    - name: Vérifier Nginx
+      command: nginx -v
+      register: nginx_version
+      ignore_errors: yes
+
+    - name: Vérifier UFW
+      command: ufw status verbose
+      register: ufw_status
+
+    - name: Afficher les versions installées
+      debug:
+        msg:
+          - " Git: {{ git_version.stdout }}"
+          - " Docker: {{ docker_version.stdout }}"
+          - " Nginx: {{ nginx_version.stderr }}"
+          - " UFW: activé et configuré"
+
+    - name: Afficher l'état du pare-feu
+      debug:
+        var: ufw_status.stdout_lines
